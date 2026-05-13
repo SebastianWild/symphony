@@ -393,16 +393,9 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   defp format_project_link_lines do
-    project_part =
-      case Config.settings!().tracker.project_slug do
-        project_slug when is_binary(project_slug) and project_slug != "" ->
-          colorize(linear_project_url(project_slug), @ansi_cyan)
-
-        _ ->
-          colorize("n/a", @ansi_gray)
-      end
-
-    project_line = colorize("│ Project: ", @ansi_bold) <> project_part
+    {label, target} = tracker_link_target(Config.settings!().tracker)
+    project_part = if is_binary(target), do: colorize(target, @ansi_cyan), else: colorize("n/a", @ansi_gray)
+    project_line = colorize("│ #{label}: ", @ansi_bold) <> project_part
 
     case dashboard_url() do
       url when is_binary(url) ->
@@ -412,6 +405,17 @@ defmodule SymphonyElixir.StatusDashboard do
         [project_line]
     end
   end
+
+  defp tracker_link_target(%{kind: "obsidian_kanban", board_path: board_path})
+       when is_binary(board_path) and board_path != "" do
+    {"Board", board_path}
+  end
+
+  defp tracker_link_target(%{project_slug: project_slug}) when is_binary(project_slug) and project_slug != "" do
+    {"Project", linear_project_url(project_slug)}
+  end
+
+  defp tracker_link_target(_tracker), do: {"Project", nil}
 
   defp format_project_refresh_line(%{checking?: true}) do
     colorize("│ Next refresh: ", @ansi_bold) <> colorize("checking now…", @ansi_cyan)

@@ -15,8 +15,8 @@ behavior.
 
 ## 1. Problem Statement
 
-Symphony is a long-running automation service that continuously reads work from an issue tracker
-(Linear in this specification version), creates an isolated workspace for each issue, and runs a
+Symphony is a long-running automation service that continuously reads work from an issue tracker,
+creates an isolated workspace for each issue, and runs a
 coding agent session for that issue inside the workspace.
 
 The service solves four operational problems:
@@ -129,7 +129,7 @@ Symphony is easiest to port when kept in these layers:
 4. `Execution Layer` (workspace + agent subprocess)
    - Filesystem lifecycle, workspace preparation, coding-agent protocol.
 
-5. `Integration Layer` (Linear adapter)
+5. `Integration Layer` (tracker adapter)
    - API calls and normalization for tracker data.
 
 6. `Observability Layer` (logs + OPTIONAL status surface)
@@ -137,7 +137,8 @@ Symphony is easiest to port when kept in these layers:
 
 ### 3.3 External Dependencies
 
-- Issue tracker API (Linear for `tracker.kind: linear` in this specification version).
+- Issue tracker API or file store for configured tracker adapters.
+- Built-in tracker kinds in the reference implementation are `linear` and `obsidian_kanban`.
 - Local filesystem for workspaces and logs.
 - OPTIONAL workspace population tooling (for example Git CLI, if used).
 - Coding-agent executable that supports the targeted Codex app-server mode.
@@ -175,6 +176,11 @@ Fields:
     - `state` (string or null)
 - `created_at` (timestamp or null)
 - `updated_at` (timestamp or null)
+
+Tracker adapters MUST normalize their native work items to this issue model. For
+`tracker.kind: obsidian_kanban`, the wikilink target is `id`, the wikilink display text or note
+basename is `identifier` and `title`, the containing column heading is `state`, and the linked note
+body is `description`.
 
 #### 4.1.2 Workflow Definition
 
@@ -349,7 +355,7 @@ Fields:
 
 - `kind` (string)
   - REQUIRED for dispatch.
-  - Current supported value: `linear`
+  - Supported values in the reference implementation: `linear`, `obsidian_kanban`.
 - `endpoint` (string)
   - Default for `tracker.kind == "linear"`: `https://api.linear.app/graphql`
 - `api_key` (string)
@@ -358,6 +364,9 @@ Fields:
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `project_slug` (string)
   - REQUIRED for dispatch when `tracker.kind == "linear"`.
+- `board_path` (path string or `$VAR`)
+  - REQUIRED for dispatch when `tracker.kind == "obsidian_kanban"`.
+  - Points to the Obsidian Kanban Markdown board file.
 - `active_states` (list of strings)
   - Default: `Todo`, `In Progress`
 - `terminal_states` (list of strings)
@@ -560,8 +569,9 @@ Validation checks:
 
 - Workflow file can be loaded and parsed.
 - `tracker.kind` is present and supported.
-- `tracker.api_key` is present after `$` resolution.
+- `tracker.api_key` is present after `$` resolution when REQUIRED by the selected tracker kind.
 - `tracker.project_slug` is present when REQUIRED by the selected tracker kind.
+- `tracker.board_path` is present when REQUIRED by the selected tracker kind.
 - `codex.command` is present and non-empty.
 
 ### 6.4 Core Config Fields Summary (Cheat Sheet)
@@ -570,10 +580,11 @@ This section is intentionally redundant so a coding agent can implement the conf
 Extension fields are documented in the extension section that defines them. Core conformance does
 not require recognizing or validating extension fields unless that extension is implemented.
 
-- `tracker.kind`: string, REQUIRED, currently `linear`
+- `tracker.kind`: string, REQUIRED, `linear` or `obsidian_kanban`
 - `tracker.endpoint`: string, default `https://api.linear.app/graphql` when `tracker.kind=linear`
 - `tracker.api_key`: string or `$VAR`, canonical env `LINEAR_API_KEY` when `tracker.kind=linear`
 - `tracker.project_slug`: string, REQUIRED when `tracker.kind=linear`
+- `tracker.board_path`: path string or `$VAR`, REQUIRED when `tracker.kind=obsidian_kanban`
 - `tracker.active_states`: list of strings, default `["Todo", "In Progress"]`
 - `tracker.terminal_states`: list of strings, default `["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]`
 - `polling.interval_ms`: integer, default `30000`
@@ -1044,10 +1055,11 @@ Unsupported dynamic tool calls:
   using the targeted protocol and continue the session.
 - This prevents the session from stalling on unsupported tool execution paths.
 
-Optional client-side tool extension:
+Optional client-side tool extensions:
 
 - An implementation MAY expose a limited set of client-side tools to the app-server session.
-- Current standardized optional tool: `linear_graphql`.
+- Current standardized optional tools: `linear_graphql` for Linear, `obsidian_kanban` for Obsidian
+  Kanban.
 - If implemented, supported tools SHOULD be advertised to the app-server session during startup
   using the protocol mechanism supported by the targeted Codex app-server version.
 - Unsupported tool names SHOULD still return a failure result using the targeted protocol and
@@ -1085,6 +1097,20 @@ Optional client-side tool extension:
   - invalid input, missing auth, or transport failure -> `success=false` with an error payload
 - Return the GraphQL response or error payload as structured tool output that the model can inspect
   in-session.
+
+`obsidian_kanban` extension contract:
+
+- Purpose: read and mutate only the configured Obsidian Kanban board file and linked note files.
+- Availability: only meaningful when `tracker.kind == "obsidian_kanban"` and `tracker.board_path`
+  is configured.
+- Supported actions SHOULD include reading the current issue, updating state, replacing the
+  `## Codex Workpad` section, and appending to that section.
+- State updates MUST move the original card line between lane sections and MUST mark the checkbox
+  checked only for configured terminal states.
+- Workpad writes MUST target the note linked by the card wikilink and MUST preserve unrelated note
+  content.
+- Board and note writes SHOULD be atomic and SHOULD reject stale content if the file changed after
+  it was read.
 
 User-input-required policy:
 
@@ -1130,14 +1156,14 @@ Note:
 
 - Workspaces are intentionally preserved after successful runs.
 
-## 11. Issue Tracker Integration Contract (Linear-Compatible)
+## 11. Issue Tracker Integration Contract
 
 ### 11.1 REQUIRED Operations
 
 An implementation MUST support these tracker adapter operations:
 
 1. `fetch_candidate_issues()`
-   - Return issues in configured active states for a configured project.
+   - Return issues in configured active states for the configured tracker source.
 
 2. `fetch_issues_by_states(state_names)`
    - Used for startup terminal cleanup.
@@ -1166,6 +1192,21 @@ Important:
 
 A non-Linear implementation MAY change transport details, but the normalized outputs MUST match the
 domain model in Section 4.
+
+### 11.3 Query Semantics (Obsidian Kanban)
+
+Obsidian-specific requirements for `tracker.kind == "obsidian_kanban"`:
+
+- `tracker.board_path` points to the Markdown Kanban board file.
+- Level-two Markdown headings (`## Todo`) define lane/state names.
+- Parsing stops at the `%% kanban:settings` block, and that block is preserved during writes.
+- Schedulable cards are wikilink checklist items matching `- [ ] [[Note Name]]` or
+  `- [x] [[Note Name]]`; non-wikilink cards are ignored by Symphony.
+- The wikilink target is the stable issue ID.
+- The wikilink alias, or target basename when no alias exists, is the issue identifier/title.
+- The linked note body is the durable issue body/workpad.
+- Labels are normalized from `#tags` in card text and note content/metadata.
+- Writes preserve front matter, lane order, unrelated card text, blank lines, and Kanban settings.
 
 ### 11.3 Normalization Rules
 
@@ -1940,7 +1981,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Invalid YAML front matter returns typed error
 - Front matter non-map returns typed error
 - Config defaults apply when OPTIONAL values are missing
-- `tracker.kind` validation enforces currently supported kind (`linear`)
+- `tracker.kind` validation enforces currently supported kinds (`linear`, `obsidian_kanban`)
 - `tracker.api_key` works (including `$VAR` indirection)
 - `$VAR` resolution works for tracker API key and path values
 - `~` path expansion works
@@ -2092,12 +2133,13 @@ Use the same validation profiles as Section 17:
   exposes the baseline endpoints/error semantics in Section 13.7 if shipped.
 - `linear_graphql` client-side tool extension exposes raw Linear GraphQL access through the
   app-server session using configured Symphony auth.
+- `obsidian_kanban` client-side tool extension exposes configured board/note reads, state moves,
+  and linked-note workpad updates.
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
 - TODO: Add first-class tracker write APIs (comments/state transitions) in the orchestrator instead
   of only via agent tools.
-- TODO: Add pluggable issue tracker adapters beyond Linear.
 
 ### 18.3 Operational Validation Before Production (RECOMMENDED)
 

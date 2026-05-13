@@ -1,8 +1,6 @@
-defmodule SymphonyElixir.Linear.Issue do
+defmodule SymphonyElixir.Tracker.Issue do
   @moduledoc """
-  Backward-compatible Linear issue struct.
-
-  New orchestration code should use `SymphonyElixir.Tracker.Issue`.
+  Normalized tracker work item representation used by the orchestrator.
   """
 
   defstruct [
