@@ -91,6 +91,11 @@ defmodule SymphonyElixir.Config do
     end
   end
 
+  @spec http_base_path() :: String.t()
+  def http_base_path do
+    settings!().server.base_path
+  end
+
   @spec validate!() :: :ok | {:error, term()}
   def validate! do
     with {:ok, settings} <- settings() do
@@ -114,27 +119,27 @@ defmodule SymphonyElixir.Config do
     end
   end
 
-  defp validate_semantics(settings) do
-    cond do
-      is_nil(settings.tracker.kind) ->
-        {:error, :missing_tracker_kind}
+  defp validate_semantics(%{tracker: %{kind: nil}}), do: {:error, :missing_tracker_kind}
 
-      settings.tracker.kind not in ["linear", "memory", "obsidian_kanban"] ->
-        {:error, {:unsupported_tracker_kind, settings.tracker.kind}}
-
-      settings.tracker.kind == "linear" and not is_binary(settings.tracker.api_key) ->
-        {:error, :missing_linear_api_token}
-
-      settings.tracker.kind == "linear" and not is_binary(settings.tracker.project_slug) ->
-        {:error, :missing_linear_project_slug}
-
-      settings.tracker.kind == "obsidian_kanban" and not is_binary(settings.tracker.board_path) ->
-        {:error, :missing_obsidian_kanban_board_path}
-
-      true ->
-        :ok
-    end
+  defp validate_semantics(%{tracker: %{kind: kind}}) when kind not in ["linear", "memory", "obsidian_kanban"] do
+    {:error, {:unsupported_tracker_kind, kind}}
   end
+
+  defp validate_semantics(%{tracker: %{kind: "linear", api_key: api_key}}) when not is_binary(api_key) do
+    {:error, :missing_linear_api_token}
+  end
+
+  defp validate_semantics(%{tracker: %{kind: "linear", project_slug: project_slug}})
+       when not is_binary(project_slug) do
+    {:error, :missing_linear_project_slug}
+  end
+
+  defp validate_semantics(%{tracker: %{kind: "obsidian_kanban", board_path: board_path}})
+       when not is_binary(board_path) do
+    {:error, :missing_obsidian_kanban_board_path}
+  end
+
+  defp validate_semantics(_settings), do: :ok
 
   defp format_config_error(reason) do
     case reason do

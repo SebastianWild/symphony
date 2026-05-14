@@ -12,11 +12,11 @@ defmodule SymphonyElixir.TestSupport do
       alias SymphonyElixir.Config
       alias SymphonyElixir.HttpServer
       alias SymphonyElixir.Linear.Client
-      alias SymphonyElixir.Tracker.Issue
       alias SymphonyElixir.Orchestrator
       alias SymphonyElixir.PromptBuilder
       alias SymphonyElixir.StatusDashboard
       alias SymphonyElixir.Tracker
+      alias SymphonyElixir.Tracker.Issue
       alias SymphonyElixir.Workflow
       alias SymphonyElixir.WorkflowStore
       alias SymphonyElixir.Workspace
@@ -126,6 +126,7 @@ defmodule SymphonyElixir.TestSupport do
           observability_render_interval_ms: 16,
           server_port: nil,
           server_host: nil,
+          server_base_path: nil,
           prompt: @workflow_prompt
         ],
         overrides
@@ -165,6 +166,7 @@ defmodule SymphonyElixir.TestSupport do
     observability_render_interval_ms = Keyword.get(config, :observability_render_interval_ms)
     server_port = Keyword.get(config, :server_port)
     server_host = Keyword.get(config, :server_host)
+    server_base_path = Keyword.get(config, :server_base_path)
     prompt = Keyword.get(config, :prompt)
 
     sections =
@@ -197,9 +199,16 @@ defmodule SymphonyElixir.TestSupport do
         "  turn_timeout_ms: #{yaml_value(codex_turn_timeout_ms)}",
         "  read_timeout_ms: #{yaml_value(codex_read_timeout_ms)}",
         "  stall_timeout_ms: #{yaml_value(codex_stall_timeout_ms)}",
-        hooks_yaml(hook_after_create, hook_before_poll, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
+        hooks_yaml(
+          hook_after_create,
+          hook_before_poll,
+          hook_before_run,
+          hook_after_run,
+          hook_before_remove,
+          hook_timeout_ms
+        ),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
-        server_yaml(server_port, server_host),
+        server_yaml(server_port, server_host, server_base_path),
         "---",
         prompt
       ]
@@ -271,15 +280,16 @@ defmodule SymphonyElixir.TestSupport do
     |> Enum.join("\n")
   end
 
-  defp server_yaml(nil, nil), do: nil
+  defp server_yaml(nil, nil, nil), do: nil
 
-  defp server_yaml(port, host) do
+  defp server_yaml(port, host, base_path) do
     [
       "server:",
       port && "  port: #{yaml_value(port)}",
-      host && "  host: #{yaml_value(host)}"
+      host && "  host: #{yaml_value(host)}",
+      !is_nil(base_path) && "  base_path: #{yaml_value(base_path)}"
     ]
-    |> Enum.reject(&is_nil/1)
+    |> Enum.reject(&(&1 in [nil, false]))
     |> Enum.join("\n")
   end
 

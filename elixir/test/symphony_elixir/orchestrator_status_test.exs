@@ -899,6 +899,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
   test "orchestrator restarts stalled workers with retry backoff" do
     write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "memory",
       tracker_api_token: nil,
       codex_stall_timeout_ms: 1_000
     )
@@ -942,8 +943,11 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     end)
 
     send(pid, :tick)
-    Process.sleep(100)
-    state = :sys.get_state(pid)
+
+    state =
+      wait_for_state(pid, fn state ->
+        not Process.alive?(worker_pid) and not Map.has_key?(state.running, issue_id)
+      end)
 
     refute Process.alive?(worker_pid)
     refute Map.has_key?(state.running, issue_id)
@@ -1023,6 +1027,9 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert StatusDashboard.dashboard_url_for_test("::1", 4000, nil) ==
              "http://[::1]:4000/"
+
+    assert StatusDashboard.dashboard_url_for_test("127.0.0.1", 4000, nil, "/automated-setups") ==
+             "http://127.0.0.1:4000/automated-setups/"
   end
 
   test "status dashboard renders next refresh countdown and checking marker" do
@@ -1557,6 +1564,11 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     do_wait_for_snapshot(pid, predicate, deadline_ms)
   end
 
+  defp wait_for_state(pid, predicate, timeout_ms \\ 500) when is_function(predicate, 1) do
+    deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_state(pid, predicate, deadline_ms)
+  end
+
   defp do_wait_for_snapshot(pid, predicate, deadline_ms) do
     snapshot = GenServer.call(pid, :snapshot)
 
@@ -1568,6 +1580,21 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       else
         Process.sleep(5)
         do_wait_for_snapshot(pid, predicate, deadline_ms)
+      end
+    end
+  end
+
+  defp do_wait_for_state(pid, predicate, deadline_ms) do
+    state = :sys.get_state(pid)
+
+    if predicate.(state) do
+      state
+    else
+      if System.monotonic_time(:millisecond) >= deadline_ms do
+        flunk("timed out waiting for orchestrator state: #{inspect(state)}")
+      else
+        Process.sleep(5)
+        do_wait_for_state(pid, predicate, deadline_ms)
       end
     end
   end

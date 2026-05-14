@@ -1399,6 +1399,15 @@ Extension config:
   - Enables the HTTP server extension.
   - `0` requests an ephemeral port for local development and tests.
   - CLI `--port` overrides `server.port` when both are present.
+- `server.base_path` (string, OPTIONAL)
+  - Public browser-facing path prefix for the dashboard when Symphony is exposed behind a reverse
+    proxy that strips the prefix before forwarding upstream.
+  - Unset, empty, or `/` means no prefix.
+  - Values are normalized to a leading slash and no trailing slash, for example `automated-setups`
+    and `/automated-setups/` both become `/automated-setups`.
+  - Implementations MUST keep upstream routes mounted at `/`, `/live`, `/dashboard.css`, and
+    `/api/v1/*`; `server.base_path` applies only to generated browser-facing URLs.
+  - `SYMPHONY_HTTP_BASE_PATH` MAY provide a fallback when `server.base_path` is unset.
 
 Enablement (extension):
 

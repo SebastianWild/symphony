@@ -745,6 +745,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert config.worker.max_concurrent_agents_per_host == nil
     assert config.agent.max_concurrent_agents == 10
     assert config.codex.command == "codex app-server"
+    assert config.server.base_path == ""
 
     assert config.codex.approval_policy == %{
              "reject" => %{
@@ -778,6 +779,25 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert Config.settings!().codex.command ==
              "codex --config 'model=\"gpt-5.5\"' app-server"
+
+    previous_base_path = System.get_env("SYMPHONY_HTTP_BASE_PATH")
+
+    on_exit(fn ->
+      restore_env("SYMPHONY_HTTP_BASE_PATH", previous_base_path)
+    end)
+
+    System.put_env("SYMPHONY_HTTP_BASE_PATH", "automated-setups")
+    write_workflow_file!(Workflow.workflow_file_path(), server_base_path: nil)
+    assert Config.settings!().server.base_path == "/automated-setups"
+
+    write_workflow_file!(Workflow.workflow_file_path(), server_base_path: "/workflow-path/")
+    assert Config.settings!().server.base_path == "/workflow-path"
+
+    write_workflow_file!(Workflow.workflow_file_path(), server_base_path: "")
+    assert Config.settings!().server.base_path == ""
+
+    write_workflow_file!(Workflow.workflow_file_path(), server_base_path: "/")
+    assert Config.settings!().server.base_path == ""
 
     explicit_root =
       Path.join(

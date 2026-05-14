@@ -218,7 +218,11 @@ defmodule SymphonyElixir.Config.Schema do
     @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
     def changeset(schema, attrs) do
       schema
-      |> cast(attrs, [:after_create, :before_poll, :before_run, :after_run, :before_remove, :timeout_ms], empty_values: [])
+      |> cast(
+        attrs,
+        [:after_create, :before_poll, :before_run, :after_run, :before_remove, :timeout_ms],
+        empty_values: []
+      )
       |> validate_number(:timeout_ms, greater_than: 0)
     end
   end
@@ -253,12 +257,13 @@ defmodule SymphonyElixir.Config.Schema do
     embedded_schema do
       field(:port, :integer)
       field(:host, :string, default: "127.0.0.1")
+      field(:base_path, :string)
     end
 
     @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
     def changeset(schema, attrs) do
       schema
-      |> cast(attrs, [:port, :host], empty_values: [])
+      |> cast(attrs, [:port, :host, :base_path], empty_values: [])
       |> validate_number(:port, greater_than_or_equal_to: 0)
     end
   end
@@ -386,7 +391,35 @@ defmodule SymphonyElixir.Config.Schema do
         turn_sandbox_policy: normalize_optional_map(settings.codex.turn_sandbox_policy)
     }
 
-    %{settings | tracker: tracker, workspace: workspace, codex: codex}
+    server = %{
+      settings.server
+      | base_path: normalize_base_path(settings.server.base_path, System.get_env("SYMPHONY_HTTP_BASE_PATH"))
+    }
+
+    %{settings | tracker: tracker, workspace: workspace, codex: codex, server: server}
+  end
+
+  @doc false
+  @spec normalize_base_path(String.t() | nil, String.t() | nil) :: String.t()
+  def normalize_base_path(nil, fallback), do: normalize_base_path(fallback)
+  def normalize_base_path(value, _fallback), do: normalize_base_path(value)
+
+  @doc false
+  @spec normalize_base_path(String.t() | nil) :: String.t()
+  def normalize_base_path(value) when value in [nil, ""], do: ""
+
+  def normalize_base_path(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> case do
+      "" -> ""
+      "/" -> ""
+      trimmed -> "/" <> (trimmed |> String.trim_leading("/") |> String.trim_trailing("/"))
+    end
+    |> case do
+      "/" -> ""
+      normalized -> normalized
+    end
   end
 
   defp normalize_keys(value) when is_map(value) do

@@ -78,9 +78,8 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
       when is_binary(issue_id) and is_binary(state_name) do
     with {:ok, content, stat} <- read_file_with_stat(board_path()),
          {:ok, board} <- parse_board(content, board_path()),
-         {:ok, updated_board} <- move_card(board, issue_id, state_name),
-         :ok <- write_file_if_unchanged(board.path, render_board(updated_board), stat) do
-      :ok
+         {:ok, updated_board} <- move_card(board, issue_id, state_name) do
+      write_file_if_unchanged(board.path, render_board(updated_board), stat)
     end
   end
 
@@ -389,15 +388,17 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
       |> Enum.flat_map(fn {%Lane{} = lane, lane_index} ->
         lane.body
         |> Enum.with_index()
-        |> Enum.flat_map(fn {line, line_index} ->
-          case parse_card_line(line) do
-            {:ok, %{id: ^issue_id} = card} -> [{lane_index, line_index, card}]
-            _ -> []
-          end
-        end)
+        |> Enum.flat_map(fn {line, line_index} -> matching_card(line, issue_id, lane_index, line_index) end)
       end)
 
     {:ok, matches}
+  end
+
+  defp matching_card(line, issue_id, lane_index, line_index) do
+    case parse_card_line(line) do
+      {:ok, %{id: ^issue_id} = card} -> [{lane_index, line_index, card}]
+      _ -> []
+    end
   end
 
   defp lane_index(%Board{} = board, state_name) do
@@ -470,9 +471,8 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
          :ok <- ensure_note_inside_board_dir(board.path, path),
          {:ok, content, stat} <- read_optional_file_with_stat(path),
          updated <- rewrite_workpad_section(content, body, mode),
-         :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- write_file_if_unchanged(path, updated, stat) do
-      :ok
+         :ok <- File.mkdir_p(Path.dirname(path)) do
+      write_file_if_unchanged(path, updated, stat)
     end
   end
 
@@ -574,9 +574,9 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
   end
 
   defp write_file_if_unchanged(path, content, original_signature) do
-    with :ok <- reject_if_changed(path, original_signature),
-         :ok <- atomic_write(path, content) do
-      :ok
+    case reject_if_changed(path, original_signature) do
+      :ok -> atomic_write(path, content)
+      {:error, reason} -> {:error, reason}
     end
   end
 

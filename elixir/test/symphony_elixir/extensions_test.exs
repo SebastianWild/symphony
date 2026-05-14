@@ -499,6 +499,7 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert html =~ "/vendor/phoenix_html/phoenix_html.js"
     assert html =~ "/vendor/phoenix/phoenix.js"
     assert html =~ "/vendor/phoenix_live_view/phoenix_live_view.js"
+    assert html =~ ~s(content="/live")
     refute html =~ "/assets/app.js"
     refute html =~ "<style>"
 
@@ -518,6 +519,43 @@ defmodule SymphonyElixir.ExtensionsTest do
       response(get(build_conn(), "/vendor/phoenix_live_view/phoenix_live_view.js"), 200)
 
     assert live_view_js =~ "var LiveView = (() => {"
+  end
+
+  test "dashboard renders browser-facing urls with configured public base path" do
+    orchestrator_name = Module.concat(__MODULE__, :BasePathOrchestrator)
+
+    {:ok, _pid} =
+      StaticOrchestrator.start_link(
+        name: orchestrator_name,
+        snapshot: static_snapshot(),
+        refresh: %{
+          queued: true,
+          coalesced: false,
+          requested_at: DateTime.utc_now(),
+          operations: ["poll"]
+        }
+      )
+
+    start_test_endpoint(
+      orchestrator: orchestrator_name,
+      snapshot_timeout_ms: 50,
+      base_path: "/automated-setups"
+    )
+
+    html = html_response(get(build_conn(), "/"), 200)
+
+    assert html =~ ~s(src="/automated-setups/vendor/phoenix_html/phoenix_html.js")
+    assert html =~ ~s(src="/automated-setups/vendor/phoenix/phoenix.js")
+    assert html =~ ~s(src="/automated-setups/vendor/phoenix_live_view/phoenix_live_view.js")
+    assert html =~ ~s(href="/automated-setups/dashboard.css")
+    assert html =~ ~s(content="/automated-setups/live")
+    assert html =~ ~s(href="/automated-setups/api/v1/MT-HTTP")
+    assert html =~ ~s(href="/automated-setups/api/v1/MT-RETRY")
+
+    assert response(get(build_conn(), "/dashboard.css"), 200) =~ ":root {"
+
+    assert json_response(get(build_conn(), "/api/v1/state"), 200)["counts"] ==
+             %{"running" => 1, "retrying" => 1}
   end
 
   test "dashboard liveview renders and refreshes over pubsub" do
@@ -676,7 +714,7 @@ defmodule SymphonyElixir.ExtensionsTest do
     endpoint_config =
       :symphony_elixir
       |> Application.get_env(SymphonyElixirWeb.Endpoint, [])
-      |> Keyword.merge(server: false, secret_key_base: String.duplicate("s", 64))
+      |> Keyword.merge(server: false, secret_key_base: String.duplicate("s", 64), base_path: "")
       |> Keyword.merge(overrides)
 
     Application.put_env(:symphony_elixir, SymphonyElixirWeb.Endpoint, endpoint_config)

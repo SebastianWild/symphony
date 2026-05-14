@@ -4,6 +4,7 @@ defmodule SymphonyElixir.HttpServer do
   """
 
   alias SymphonyElixir.{Config, Orchestrator}
+  alias SymphonyElixir.Config.Schema
   alias SymphonyElixirWeb.Endpoint
 
   @secret_key_bytes 48
@@ -21,6 +22,7 @@ defmodule SymphonyElixir.HttpServer do
     case Keyword.get(opts, :port, Config.server_port()) do
       port when is_integer(port) and port >= 0 ->
         host = Keyword.get(opts, :host, Config.settings!().server.host)
+        base_path = opts |> Keyword.get(:base_path, Config.http_base_path()) |> Schema.normalize_base_path()
         orchestrator = Keyword.get(opts, :orchestrator, Orchestrator)
         snapshot_timeout_ms = Keyword.get(opts, :snapshot_timeout_ms, 15_000)
 
@@ -29,6 +31,7 @@ defmodule SymphonyElixir.HttpServer do
             server: true,
             http: [ip: ip, port: port],
             url: [host: normalize_host(host)],
+            base_path: base_path,
             orchestrator: orchestrator,
             snapshot_timeout_ms: snapshot_timeout_ms,
             secret_key_base: secret_key_base()

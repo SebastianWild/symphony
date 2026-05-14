@@ -14,6 +14,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
       socket
       |> assign(:payload, load_payload())
       |> assign(:now, DateTime.utc_now())
+      |> assign(:base_path, SymphonyElixirWeb.PublicPath.base_path())
 
     if connected?(socket) do
       :ok = ObservabilityPubSub.subscribe()
@@ -153,7 +154,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
                     <td>
                       <div class="issue-stack">
                         <span class="issue-id"><%= entry.issue_identifier %></span>
-                        <a class="issue-link" href={"/api/v1/#{entry.issue_identifier}"}>JSON details</a>
+                        <a class="issue-link" href={public_path(@base_path, "/api/v1/#{entry.issue_identifier}")}>JSON details</a>
                       </div>
                     </td>
                     <td>
@@ -232,7 +233,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
                     <td>
                       <div class="issue-stack">
                         <span class="issue-id"><%= entry.issue_identifier %></span>
-                        <a class="issue-link" href={"/api/v1/#{entry.issue_identifier}"}>JSON details</a>
+                        <a class="issue-link" href={public_path(@base_path, "/api/v1/#{entry.issue_identifier}")}>JSON details</a>
                       </div>
                     </td>
                     <td><%= entry.attempt %></td>
@@ -320,6 +321,8 @@ defmodule SymphonyElixirWeb.DashboardLive do
       true -> base
     end
   end
+
+  defp public_path(base_path, path), do: SymphonyElixirWeb.PublicPath.path(base_path, path)
 
   defp schedule_runtime_tick do
     Process.send_after(self(), :runtime_tick, @runtime_tick_ms)

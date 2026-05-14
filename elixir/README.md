@@ -192,6 +192,11 @@ codex:
   reload error until the file is fixed.
 - `server.port` or CLI `--port` enables the optional Phoenix LiveView dashboard and JSON API at
   `/`, `/api/v1/state`, `/api/v1/<issue_identifier>`, and `/api/v1/refresh`.
+- `server.base_path` sets the public browser-facing dashboard prefix when a reverse proxy strips a
+  project path before forwarding to Symphony. For example, `server.base_path: /automated-setups`
+  keeps upstream routes at `/`, `/live`, `/dashboard.css`, and `/api/v1/*`, while generated asset,
+  LiveView socket, and dashboard JSON links use `/automated-setups/...`. `SYMPHONY_HTTP_BASE_PATH`
+  is used as a fallback when `server.base_path` is unset.
 
 ## Web dashboard
 
