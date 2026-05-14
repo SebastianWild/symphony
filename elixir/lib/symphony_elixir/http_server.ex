@@ -30,7 +30,7 @@ defmodule SymphonyElixir.HttpServer do
           endpoint_opts = [
             server: true,
             http: [ip: ip, port: port],
-            url: [host: normalize_host(host)],
+            url: [host: normalize_host(host), path: endpoint_url_path(base_path)],
             base_path: base_path,
             orchestrator: orchestrator,
             snapshot_timeout_ms: snapshot_timeout_ms,
@@ -84,6 +84,9 @@ defmodule SymphonyElixir.HttpServer do
   defp normalize_host(host) when host in ["", nil], do: "127.0.0.1"
   defp normalize_host(host) when is_binary(host), do: host
   defp normalize_host(host), do: to_string(host)
+
+  defp endpoint_url_path(""), do: "/"
+  defp endpoint_url_path(path), do: path
 
   defp secret_key_base do
     Base.encode64(:crypto.strong_rand_bytes(@secret_key_bytes), padding: false)

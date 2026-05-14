@@ -544,6 +544,7 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     html = html_response(get(build_conn(), "/"), 200)
 
+    assert SymphonyElixirWeb.Endpoint.script_name() == ["automated-setups"]
     assert html =~ ~s(src="/automated-setups/vendor/phoenix_html/phoenix_html.js")
     assert html =~ ~s(src="/automated-setups/vendor/phoenix/phoenix.js")
     assert html =~ ~s(src="/automated-setups/vendor/phoenix_live_view/phoenix_live_view.js")
@@ -556,6 +557,10 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert json_response(get(build_conn(), "/api/v1/state"), 200)["counts"] ==
              %{"running" => 1, "retrying" => 1}
+
+    prefixed_conn = %{build_conn() | script_name: ["automated-setups"]}
+    {:ok, _view, live_html} = live(prefixed_conn, "/")
+    assert live_html =~ "Operations Dashboard"
   end
 
   test "dashboard liveview renders and refreshes over pubsub" do
@@ -717,9 +722,19 @@ defmodule SymphonyElixir.ExtensionsTest do
       |> Keyword.merge(server: false, secret_key_base: String.duplicate("s", 64), base_path: "")
       |> Keyword.merge(overrides)
 
+    base_path = Keyword.fetch!(endpoint_config, :base_path)
+
+    endpoint_config =
+      Keyword.update(endpoint_config, :url, [path: endpoint_url_path(base_path)], fn url ->
+        Keyword.put(url, :path, endpoint_url_path(base_path))
+      end)
+
     Application.put_env(:symphony_elixir, SymphonyElixirWeb.Endpoint, endpoint_config)
     start_supervised!({SymphonyElixirWeb.Endpoint, []})
   end
+
+  defp endpoint_url_path(""), do: "/"
+  defp endpoint_url_path(path), do: path
 
   defp static_snapshot do
     %{
