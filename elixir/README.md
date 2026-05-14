@@ -101,6 +101,8 @@ tracker:
 workspace:
   root: ~/code/workspaces
 hooks:
+  before_poll: |
+    ob sync --path ~/Obsidian/Work
   after_create: |
     git clone git@github.com:your-org/your-repo.git .
 agent:
@@ -145,6 +147,8 @@ replace or append the `## Codex Workpad` section in the linked note.
 Notes:
 
 - If a value is missing, defaults are used.
+- Use `hooks.before_poll` when the tracker source needs an external refresh before each poll,
+  such as pulling Obsidian Sync before reading an Obsidian Kanban board.
 - Safer Codex defaults are used when policy fields are omitted:
   - `codex.approval_policy` defaults to `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`
   - `codex.thread_sandbox` defaults to `workspace-write`

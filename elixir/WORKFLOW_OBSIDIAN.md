@@ -15,6 +15,8 @@ polling:
 workspace:
   root: ~/code/symphony-workspaces
 hooks:
+  before_poll: |
+    ob sync --path ~/Obsidian/Work
   after_create: |
     git clone git@github.com:your-org/your-repo.git .
 agent:

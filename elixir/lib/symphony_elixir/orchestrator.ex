@@ -7,7 +7,7 @@ defmodule SymphonyElixir.Orchestrator do
   require Logger
   import Bitwise, only: [<<<: 2]
 
-  alias SymphonyElixir.{AgentRunner, Config, StatusDashboard, Tracker, Workspace}
+  alias SymphonyElixir.{AgentRunner, Config, StatusDashboard, Tracker, Workflow, Workspace}
   alias SymphonyElixir.Tracker.Issue
 
   @continuation_retry_delay_ms 1_000
@@ -222,9 +222,9 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_dispatch(%State{} = state) do
-    state = reconcile_running_issues(state)
-
     with :ok <- Config.validate!(),
+         :ok <- run_before_poll_hook(),
+         %State{} = state <- reconcile_running_issues(state),
          {:ok, issues} <- Tracker.fetch_candidate_issues(),
          true <- available_slots(state) > 0 do
       choose_issues(issues, state)
@@ -260,6 +260,14 @@ defmodule SymphonyElixir.Orchestrator do
         Logger.error("Missing WORKFLOW.md at #{path}: #{inspect(reason)}")
         state
 
+      {:error, {:poll_hook_failed, status, output}} ->
+        Logger.error("before_poll hook failed status=#{status} output=#{inspect(sanitize_hook_output_for_log(output))}")
+        state
+
+      {:error, {:poll_hook_timeout, timeout_ms}} ->
+        Logger.error("before_poll hook timed out timeout_ms=#{timeout_ms}")
+        state
+
       {:error, :workflow_front_matter_not_a_map} ->
         Logger.error("Failed to parse WORKFLOW.md: workflow front matter must decode to a map")
         state
@@ -274,6 +282,57 @@ defmodule SymphonyElixir.Orchestrator do
 
       false ->
         state
+    end
+  end
+
+  @doc false
+  @spec run_before_poll_hook_for_test() :: :ok | {:error, term()}
+  def run_before_poll_hook_for_test, do: run_before_poll_hook()
+
+  defp run_before_poll_hook do
+    hooks = Config.settings!().hooks
+
+    case hooks.before_poll do
+      nil ->
+        :ok
+
+      command ->
+        run_poll_hook(command, hooks.timeout_ms)
+    end
+  end
+
+  defp run_poll_hook(command, timeout_ms) when is_binary(command) and is_integer(timeout_ms) do
+    cwd =
+      Workflow.workflow_file_path()
+      |> Path.dirname()
+
+    Logger.info("Running before_poll hook cwd=#{cwd}")
+
+    task =
+      Task.async(fn ->
+        System.cmd("sh", ["-lc", command], cd: cwd, stderr_to_stdout: true)
+      end)
+
+    case Task.yield(task, timeout_ms) do
+      {:ok, {_output, 0}} ->
+        :ok
+
+      {:ok, {output, status}} ->
+        {:error, {:poll_hook_failed, status, output}}
+
+      nil ->
+        Task.shutdown(task, :brutal_kill)
+        {:error, {:poll_hook_timeout, timeout_ms}}
+    end
+  end
+
+  defp sanitize_hook_output_for_log(output, max_bytes \\ 2_048) do
+    binary_output = IO.iodata_to_binary(output)
+
+    if byte_size(binary_output) <= max_bytes do
+      binary_output
+    else
+      binary_part(binary_output, 0, max_bytes) <> "... (truncated)"
     end
   end
 

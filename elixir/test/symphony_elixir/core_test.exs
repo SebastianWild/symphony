@@ -703,6 +703,22 @@ defmodule SymphonyElixir.CoreTest do
     assert {:noreply, ^coalesced_state} = Orchestrator.handle_info({:tick, stale_tick_token}, coalesced_state)
   end
 
+  test "before_poll hook runs before tracker refresh" do
+    marker_path = Path.join(System.tmp_dir!(), "symphony-before-poll-#{System.unique_integer([:positive])}")
+
+    on_exit(fn -> File.rm(marker_path) end)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "memory",
+      tracker_api_token: nil,
+      tracker_project_slug: nil,
+      hook_before_poll: "printf synced > #{marker_path}"
+    )
+
+    assert :ok = Orchestrator.run_before_poll_hook_for_test()
+    assert File.read!(marker_path) == "synced"
+  end
+
   test "select_worker_host_for_test skips full ssh hosts under the shared per-host cap" do
     write_workflow_file!(Workflow.workflow_file_path(),
       worker_ssh_hosts: ["worker-a", "worker-b"],
