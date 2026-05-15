@@ -157,6 +157,97 @@ defmodule SymphonyElixir.ObsidianKanbanTest do
     assert {:ok, [%Issue{id: "First"}]} = Tracker.fetch_issue_states_by_ids(["First"])
   end
 
+  test "required tags filter shared Obsidian boards by repo scope" do
+    test_root = tmp_dir("obsidian-required-tags")
+    board_path = Path.join(test_root, "Kanban.md")
+
+    File.write!(Path.join(test_root, "Body Tagged.md"), "Body #automated-setups\n")
+    File.write!(Path.join(test_root, "Frontmatter Tagged.md"), "---\ntags: [automated-setups]\n---\n\nBody\n")
+
+    scoped_board = """
+    ## Todo
+    - [ ] [[Card Tagged]] #automated-setups
+    - [ ] [[Body Tagged]]
+    - [ ] [[Frontmatter Tagged]]
+    - [ ] [[Wrong Repo]] #symphony
+    - [ ] [[Untagged]]
+
+    ## Done
+    - [x] [[Finished]] #automated-setups
+    - [x] [[Finished Untagged]]
+    """
+
+    File.write!(board_path, scoped_board)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "obsidian_kanban",
+      tracker_api_token: nil,
+      tracker_project_slug: nil,
+      tracker_board_path: board_path,
+      tracker_required_tags: ["#Automated-Setups"],
+      tracker_active_states: ["Todo"],
+      tracker_terminal_states: ["Done"]
+    )
+
+    assert Config.settings!().tracker.required_tags == ["automated-setups"]
+
+    assert {:ok, candidates} = Tracker.fetch_candidate_issues()
+    assert Enum.map(candidates, & &1.id) == ["Card Tagged", "Body Tagged", "Frontmatter Tagged"]
+
+    assert {:ok, [%Issue{id: "Finished"}]} = Tracker.fetch_issues_by_states(["Done"])
+    assert {:ok, [%Issue{id: "Card Tagged"}]} = Tracker.fetch_issue_states_by_ids(["Card Tagged", "Untagged"])
+
+    File.write!(board_path, String.replace(scoped_board, " #automated-setups", "", global: false))
+
+    assert {:ok, []} = Tracker.fetch_issue_states_by_ids(["Card Tagged"])
+  end
+
+  test "obsidian_kanban write actions reject unscoped shared-board issues" do
+    test_root = tmp_dir("obsidian-required-tags-writes")
+    board_path = Path.join(test_root, "Kanban.md")
+    unscoped_note_path = Path.join(test_root, "Unscoped.md")
+
+    File.write!(board_path, """
+    ## Todo
+    - [ ] [[Scoped]] #automated-setups
+    - [ ] [[Unscoped]]
+
+    ## In Progress
+    """)
+
+    File.write!(unscoped_note_path, "# Unscoped\n\nDo not edit\n")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "obsidian_kanban",
+      tracker_api_token: nil,
+      tracker_project_slug: nil,
+      tracker_board_path: board_path,
+      tracker_required_tags: ["automated-setups"],
+      tracker_active_states: ["Todo", "In Progress"],
+      tracker_terminal_states: ["Done"]
+    )
+
+    state =
+      DynamicTool.execute("obsidian_kanban", %{
+        "action" => "update_state",
+        "issue_id" => "Unscoped",
+        "state" => "In Progress"
+      })
+
+    assert state["success"] == false
+    assert File.read!(board_path) =~ "## Todo\n- [ ] [[Scoped]] #automated-setups\n- [ ] [[Unscoped]]\n\n## In Progress\n"
+
+    replace =
+      DynamicTool.execute("obsidian_kanban", %{
+        "action" => "replace_workpad_section",
+        "issue_id" => "Unscoped",
+        "body" => "- [ ] should not write"
+      })
+
+    assert replace["success"] == false
+    refute File.read!(unscoped_note_path) =~ "## Codex Workpad"
+  end
+
   test "obsidian_kanban tool is advertised only for Obsidian workflows and updates notes" do
     test_root = tmp_dir("obsidian-tool")
     board_path = Path.join(test_root, "Kanban.md")

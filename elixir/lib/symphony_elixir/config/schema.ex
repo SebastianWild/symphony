@@ -51,6 +51,7 @@ defmodule SymphonyElixir.Config.Schema do
       field(:project_slug, :string)
       field(:board_path, :string)
       field(:assignee, :string)
+      field(:required_tags, {:array, :string}, default: [])
       field(:active_states, {:array, :string}, default: ["Todo", "In Progress"])
       field(:terminal_states, {:array, :string}, default: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"])
     end
@@ -60,7 +61,17 @@ defmodule SymphonyElixir.Config.Schema do
       schema
       |> cast(
         attrs,
-        [:kind, :endpoint, :api_key, :project_slug, :board_path, :assignee, :active_states, :terminal_states],
+        [
+          :kind,
+          :endpoint,
+          :api_key,
+          :project_slug,
+          :board_path,
+          :assignee,
+          :required_tags,
+          :active_states,
+          :terminal_states
+        ],
         empty_values: []
       )
     end
@@ -377,7 +388,8 @@ defmodule SymphonyElixir.Config.Schema do
       settings.tracker
       | api_key: resolve_secret_setting(settings.tracker.api_key, System.get_env("LINEAR_API_KEY")),
         board_path: resolve_optional_path_value(settings.tracker.board_path),
-        assignee: resolve_secret_setting(settings.tracker.assignee, System.get_env("LINEAR_ASSIGNEE"))
+        assignee: resolve_secret_setting(settings.tracker.assignee, System.get_env("LINEAR_ASSIGNEE")),
+        required_tags: normalize_tags(settings.tracker.required_tags)
     }
 
     workspace = %{
@@ -433,6 +445,24 @@ defmodule SymphonyElixir.Config.Schema do
 
   defp normalize_optional_map(nil), do: nil
   defp normalize_optional_map(value) when is_map(value), do: normalize_keys(value)
+
+  defp normalize_tags(tags) when is_list(tags) do
+    tags
+    |> Enum.map(&normalize_tag/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp normalize_tags(_tags), do: []
+
+  defp normalize_tag(tag) when is_binary(tag) do
+    tag
+    |> String.trim()
+    |> String.trim_leading("#")
+    |> String.downcase()
+  end
+
+  defp normalize_tag(tag), do: tag |> to_string() |> normalize_tag()
 
   defp normalize_key(value) when is_atom(value), do: Atom.to_string(value)
   defp normalize_key(value), do: to_string(value)

@@ -98,6 +98,7 @@ defmodule SymphonyElixir.TestSupport do
           tracker_project_slug: "project",
           tracker_board_path: nil,
           tracker_assignee: nil,
+          tracker_required_tags: [],
           tracker_active_states: ["Todo", "In Progress"],
           tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
           poll_interval_ms: 30_000,
@@ -138,6 +139,7 @@ defmodule SymphonyElixir.TestSupport do
     tracker_project_slug = Keyword.get(config, :tracker_project_slug)
     tracker_board_path = Keyword.get(config, :tracker_board_path)
     tracker_assignee = Keyword.get(config, :tracker_assignee)
+    tracker_required_tags = Keyword.get(config, :tracker_required_tags)
     tracker_active_states = Keyword.get(config, :tracker_active_states)
     tracker_terminal_states = Keyword.get(config, :tracker_terminal_states)
     poll_interval_ms = Keyword.get(config, :poll_interval_ms)
@@ -179,6 +181,7 @@ defmodule SymphonyElixir.TestSupport do
         "  project_slug: #{yaml_value(tracker_project_slug)}",
         "  board_path: #{yaml_value(tracker_board_path)}",
         "  assignee: #{yaml_value(tracker_assignee)}",
+        "  required_tags: #{yaml_value(tracker_required_tags)}",
         "  active_states: #{yaml_value(tracker_active_states)}",
         "  terminal_states: #{yaml_value(tracker_terminal_states)}",
         "polling:",

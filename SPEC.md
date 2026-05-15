@@ -367,6 +367,12 @@ Fields:
 - `board_path` (path string or `$VAR`)
   - REQUIRED for dispatch when `tracker.kind == "obsidian_kanban"`.
   - Points to the Obsidian Kanban Markdown board file.
+- `required_tags` (list of strings)
+  - OPTIONAL.
+  - For `tracker.kind == "obsidian_kanban"`, restricts visible cards to issues whose normalized
+    labels include every configured tag.
+  - Tags may be written with or without a leading `#`; implementations normalize them to lowercase
+    strings without `#`.
 - `active_states` (list of strings)
   - Default: `Todo`, `In Progress`
 - `terminal_states` (list of strings)
@@ -585,6 +591,7 @@ not require recognizing or validating extension fields unless that extension is 
 - `tracker.api_key`: string or `$VAR`, canonical env `LINEAR_API_KEY` when `tracker.kind=linear`
 - `tracker.project_slug`: string, REQUIRED when `tracker.kind=linear`
 - `tracker.board_path`: path string or `$VAR`, REQUIRED when `tracker.kind=obsidian_kanban`
+- `tracker.required_tags`: list of strings, OPTIONAL, default `[]`
 - `tracker.active_states`: list of strings, default `["Todo", "In Progress"]`
 - `tracker.terminal_states`: list of strings, default `["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]`
 - `polling.interval_ms`: integer, default `30000`
@@ -1206,6 +1213,8 @@ Obsidian-specific requirements for `tracker.kind == "obsidian_kanban"`:
 - The wikilink alias, or target basename when no alias exists, is the issue identifier/title.
 - The linked note body is the durable issue body/workpad.
 - Labels are normalized from `#tags` in card text and note content/metadata.
+- When `tracker.required_tags` is set, untagged cards and cards missing any required tag are ignored
+  by candidate fetches, issue refreshes, terminal cleanup, and `obsidian_kanban` tool writes.
 - Writes preserve front matter, lane order, unrelated card text, blank lines, and Kanban settings.
 
 ### 11.3 Normalization Rules

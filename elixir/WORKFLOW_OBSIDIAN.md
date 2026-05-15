@@ -2,6 +2,8 @@
 tracker:
   kind: obsidian_kanban
   board_path: ~/Obsidian/Work/Kanban.md
+  required_tags:
+    - automated-setups
   active_states:
     - Todo
     - In Progress
@@ -13,7 +15,7 @@ tracker:
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/symphony-workspaces
+  root: ~/code/symphony-workspaces/automated-setups
 hooks:
   before_poll: |
     ob sync --path ~/Obsidian/Work

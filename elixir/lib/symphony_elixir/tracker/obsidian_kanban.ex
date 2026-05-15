@@ -76,7 +76,8 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(issue_id, state_name)
       when is_binary(issue_id) and is_binary(state_name) do
-    with {:ok, content, stat} <- read_file_with_stat(board_path()),
+    with {:ok, %Issue{}} <- read_issue(issue_id),
+         {:ok, content, stat} <- read_file_with_stat(board_path()),
          {:ok, board} <- parse_board(content, board_path()),
          {:ok, updated_board} <- move_card(board, issue_id, state_name) do
       write_file_if_unchanged(board.path, render_board(updated_board), stat)
@@ -188,7 +189,7 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
   end
 
   defp safe_issues_from_board(%Board{} = board) do
-    {:ok, issues_from_board(board)}
+    {:ok, issues_from_board(board) |> filter_required_tags()}
   rescue
     error in [ArgumentError] ->
       {:error, {:invalid_obsidian_board, Exception.message(error)}}
@@ -228,6 +229,27 @@ defmodule SymphonyElixir.Tracker.ObsidianKanban do
       updated_at: note.updated_at
     }
   end
+
+  defp filter_required_tags(issues) do
+    required_tags = required_tags()
+
+    if required_tags == [] do
+      issues
+    else
+      Enum.filter(issues, &issue_has_required_tags?(&1, required_tags))
+    end
+  end
+
+  defp required_tags do
+    Config.settings!().tracker.required_tags || []
+  end
+
+  defp issue_has_required_tags?(%Issue{labels: labels}, required_tags) when is_list(labels) do
+    issue_tags = labels |> Enum.map(&normalize_label/1) |> MapSet.new()
+    Enum.all?(required_tags, &MapSet.member?(issue_tags, &1))
+  end
+
+  defp issue_has_required_tags?(_issue, _required_tags), do: false
 
   defp reject_duplicate_issue_ids(issues) do
     Enum.reduce(issues, {[], MapSet.new(), MapSet.new()}, fn %Issue{id: id} = issue, {acc, seen, dupes} ->

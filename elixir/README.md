@@ -47,6 +47,9 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
      is part of the URL.
    - For Obsidian Kanban, set `tracker.board_path` to the Markdown board file. Linked notes live
      beside that board, and each wikilink target is the stable issue ID.
+   - To share one Obsidian Kanban board across several repos, give each repo workflow a distinct
+     `tracker.required_tags` value such as `[automated-setups]`; untagged cards are ignored by that
+     repo's Symphony process.
    - When creating a workflow based on this repo, note that it depends on non-standard Linear
      issue statuses: "Rework", "Human Review", and "Merging". You can customize them in
      Team Settings → Workflow in Linear.
@@ -124,10 +127,11 @@ Minimal Obsidian Kanban example:
 tracker:
   kind: obsidian_kanban
   board_path: ~/Obsidian/Work/Kanban.md
+  required_tags: [automated-setups]
   active_states: [Todo, In Progress, Rework, Merging]
   terminal_states: [Done, Canceled]
 workspace:
-  root: ~/code/workspaces
+  root: ~/code/workspaces/automated-setups
 hooks:
   after_create: |
     git clone git@github.com:your-org/your-repo.git .
@@ -170,6 +174,8 @@ Notes:
 - `tracker.api_key` reads from `LINEAR_API_KEY` when unset or when value is `$LINEAR_API_KEY`.
 - `tracker.board_path` is required for `obsidian_kanban`; `tracker.api_key` and
   `tracker.project_slug` are not.
+- `tracker.required_tags` is optional. For Obsidian Kanban, every configured tag must be present on
+  a card or linked note for that repo process to see or mutate the issue.
 - For path values, `~` is expanded to the home directory.
 - For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
   while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the
